@@ -16,6 +16,9 @@ const AuthenticationPage = loadable(() => import(/* webpackChunkName: "Authentic
 const CheckoutPage = loadable(() => import(/* webpackChunkName: "CheckoutPage" */ '../containers/CheckoutPage/CheckoutPage'));
 const CMSPage = loadable(() => import(/* webpackChunkName: "CMSPage" */ '../containers/CMSPage/CMSPage'));
 const ContactDetailsPage = loadable(() => import(/* webpackChunkName: "ContactDetailsPage" */ '../containers/ContactDetailsPage/ContactDetailsPage'));
+//BF: Add calendar page
+const CalendarPage = loadable(() => import(/* webpackChunkName: "CalendarPage" */ '../containers/CalendarPage/CalendarPage'));
+//BF: 03.05.26
 const EditListingPage = loadable(() => import(/* webpackChunkName: "EditListingPage" */ '../containers/EditListingPage/EditListingPage'));
 const EmailVerificationPage = loadable(() => import(/* webpackChunkName: "EmailVerificationPage" */ '../containers/EmailVerificationPage/EmailVerificationPage'));
 const InboxPage = loadable(() => import(/* webpackChunkName: "InboxPage" */ '../containers/InboxPage/InboxPage'));
@@ -297,6 +300,15 @@ const routeConfiguration = (layoutConfig, accessControlConfig) => {
       authPage: 'LoginPage',
       component: props => <NamedRedirect name="SaleDetailsPage" params={{ id: props.params?.id }} />,
     },
+    // BF: Add calendar page
+    {
+      path: '/calendar',
+      name: 'CalendarPage',
+      auth: true,
+      authPage: 'LoginPage',
+      component: CalendarPage,
+    },
+    //BF: 03.05.26
     {
       path: '/listings',
       name: 'ManageListingsPage',

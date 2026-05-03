@@ -85,6 +85,17 @@ const ProfileMenu = ({ currentPage, currentUser, onLogout, showManageListingsLin
             </NamedLink>
           </MenuItem>
         ) : null}
+        {showManageListingsLink ? (
+          <MenuItem key="CalendarPage">
+            <NamedLink
+              className={classNames(css.menuLink, currentPageClass('CalendarPage'))}
+              name="CalendarPage"
+            >
+              <span className={css.menuItemBorder} />
+              <FormattedMessage id="TopbarDesktop.calendarLink" />
+            </NamedLink>
+          </MenuItem>
+        ) : null}
         <MenuItem key="ProfileSettingsPage">
           <NamedLink
             className={classNames(css.menuLink, currentPageClass('ProfileSettingsPage'))}

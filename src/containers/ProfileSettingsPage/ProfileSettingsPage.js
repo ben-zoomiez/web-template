@@ -95,7 +95,8 @@ export const ProfileSettingsPageComponent = props => {
       : { displayName: null };
 
     // Ensure that the optional bio is a string
-    const bio = rawBio || '';
+    // Customers do not have a bio field, so always submit empty string for them
+    const bio = userType === 'customer' ? '' : (rawBio || '');
 
     const profile = {
       firstName: firstName.trim(),
@@ -123,6 +124,8 @@ export const ProfileSettingsPageComponent = props => {
   const isUnauthorizedUser = currentUser && !isUserAuthorized(currentUser);
 
   const { userType } = publicData || {};
+  const isCustomer = userType === 'customer';
+
   const profileImageId = user.profileImage ? user.profileImage.id : null;
   const profileImage = image || { imageId: profileImageId };
   const userTypeConfig = userTypes.find(config => config.userType === userType);
@@ -138,7 +141,8 @@ export const ProfileSettingsPageComponent = props => {
         firstName,
         lastName,
         ...displayNameMaybe,
-        bio,
+        // Don't pass bio initial value for customers
+        bio: isCustomer ? '' : bio,
         profileImage: user.profileImage,
         ...initialValuesForUserFields(publicData, 'public', userType, userFields),
       }}
@@ -152,6 +156,7 @@ export const ProfileSettingsPageComponent = props => {
       marketplaceName={config.marketplaceName}
       userFields={publicUserFields}
       userTypeConfig={userTypeConfig}
+      userType={userType}
     />
   ) : null;
 

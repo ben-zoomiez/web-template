@@ -1,0 +1,24 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.content {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 60px;
+}
+
+@media (min-width: 768px) {
+  .content {
+    padding: 0 36px 60px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .content {
+    padding: 0 60px 60px;
+  }
+}

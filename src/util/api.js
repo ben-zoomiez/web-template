@@ -151,3 +151,11 @@ export const createUserWithIdp = body => {
 export const deleteUserAccount = body => {
   return post('/api/delete-account', body);
 };
+
+export const createAvailabilityException = body => {
+  return post('/api/availability-exceptions', body);
+};
+
+export const deleteAvailabilityException = body => {
+  return post('/api/delete-availability-exception', body);
+};

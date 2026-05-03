@@ -95,6 +95,7 @@ const DisplayNameMaybe = props => {
  * @param {propTypes.error} [props.uploadImageError] - The upload image error
  * @param {boolean} props.updateInProgress - Whether the update is in progress
  * @param {propTypes.error} [props.updateProfileError] - The update profile error
+ * @param {string} [props.userType] - The user type string (e.g. 'customer')
  * @param {intlShape} props.intl - The intl object
  * @returns {JSX.Element}
  */
@@ -148,9 +149,13 @@ class ProfileSettingsFormComponent extends Component {
             values,
             userFields,
             userTypeConfig,
+            userType,
           } = fieldRenderProps;
 
           const user = ensureCurrentUser(currentUser);
+
+          // Determine if the current user is a customer
+          const isCustomer = userType === 'customer';
 
           // First name
           const firstNameLabel = intl.formatMessage({
@@ -374,21 +379,25 @@ class ProfileSettingsFormComponent extends Component {
 
               <DisplayNameMaybe userTypeConfig={userTypeConfig} intl={intl} />
 
-              <div className={classNames(css.sectionContainer)}>
-                <H4 as="h2" className={css.sectionTitle}>
-                  <FormattedMessage id="ProfileSettingsForm.bioHeading" />
-                </H4>
-                <FieldTextInput
-                  type="textarea"
-                  id="bio"
-                  name="bio"
-                  label={bioLabel}
-                  placeholder={bioPlaceholder}
-                />
-                <p className={css.extraInfo}>
-                  <FormattedMessage id="ProfileSettingsForm.bioInfo" values={{ marketplaceName }} />
-                </p>
-              </div>
+              {/* Bio section is hidden for customers */}
+              {!isCustomer && (
+                <div className={classNames(css.sectionContainer)}>
+                  <H4 as="h2" className={css.sectionTitle}>
+                    <FormattedMessage id="ProfileSettingsForm.bioHeading" />
+                  </H4>
+                  <FieldTextInput
+                    type="textarea"
+                    id="bio"
+                    name="bio"
+                    label={bioLabel}
+                    placeholder={bioPlaceholder}
+                  />
+                  <p className={css.extraInfo}>
+                    <FormattedMessage id="ProfileSettingsForm.bioInfo" values={{ marketplaceName }} />
+                  </p>
+                </div>
+              )}
+
               <div className={classNames(css.sectionContainer, css.lastSection)}>
                 {userFieldProps.map(({ key, ...fieldProps }) => (
                   <CustomExtendedDataField key={key} {...fieldProps} formId={formId} />

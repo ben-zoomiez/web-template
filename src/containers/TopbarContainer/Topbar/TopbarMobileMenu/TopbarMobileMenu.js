@@ -162,6 +162,14 @@ const TopbarMobileMenu = props => {
     </li>
   ) : null;
 
+  const calendarLinkMaybe = showCreateListingsLink ? (
+    <li className={classNames(css.navigationLink, currentPageClass('CalendarPage'))}>
+      <NamedLink name="CalendarPage">
+        <FormattedMessage id="TopbarMobileMenu.calendarLink" />
+      </NamedLink>
+    </li>
+  ) : null;
+
   return (
     <div className={css.root}>
       <AvatarLarge className={css.avatar} user={currentUser} />
@@ -181,6 +189,7 @@ const TopbarMobileMenu = props => {
             </NamedLink>
           </li>
           {manageListingsLinkMaybe}
+          {calendarLinkMaybe}
           <li className={classNames(css.navigationLink, currentPageClass('ProfileSettingsPage'))}>
             <NamedLink name="ProfileSettingsPage">
               <FormattedMessage id="TopbarMobileMenu.profileSettingsLink" />
