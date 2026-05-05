@@ -83,7 +83,7 @@ function buildEvents(platformBookings, manualBookings, availabilityExceptions) {
 
 // ─── Manual booking modal ─────────────────────────────────────────────────────
 
-function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }) {
+function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, onClose, saving }) {
   const isEdit = !!booking;
   const ep     = booking?.extendedProps || {};
   const [form, setForm] = useState({
@@ -99,7 +99,20 @@ function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }
 
   const selectedListing = listings.find(l => l.id === form.listingId);
   const totalSeats      = selectedListing?.seats || 1;
-  const seatsExceeded   = Number(form.seats) > totalSeats;
+
+  const alreadyBookedSeats = (() => {
+    if (!form.listingId || !form.startTime || !form.endTime) return 0;
+    const newStart = new Date(form.startTime);
+    const newEnd   = new Date(form.endTime);
+    const overlaps = b => new Date(b.start) < newEnd && new Date(b.end) > newStart;
+
+    return (manualBookings || [])
+      .filter(b => b.extendedProps?.listingId === form.listingId && b.id !== booking?.id && overlaps(b))
+      .reduce((sum, b) => sum + (b.extendedProps?.seats || 1), 0);
+  })();
+
+  const availableSeats  = totalSeats - alreadyBookedSeats;
+  const seatsExceeded   = Number(form.seats) > availableSeats;
   const isValid         = form.customerName && form.listingId && form.startTime && form.endTime && Number(form.seats) >= 1 && !seatsExceeded;
 
   const handleChange = e => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -156,8 +169,8 @@ function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }
             <div style={{ ...styles.listingInfo, ...(seatsExceeded ? styles.listingInfoError : {}) }}>
               <span style={styles.listingInfoLabel}>Availability after booking</span>
               {seatsExceeded
-                ? <span style={styles.listingInfoErrorValue}>Exceeds capacity by {Number(form.seats) - totalSeats}</span>
-                : <span style={styles.listingInfoValue}>{totalSeats - Number(form.seats)}</span>
+                ? <span style={styles.listingInfoErrorValue}>Exceeds capacity by {Number(form.seats) - availableSeats}</span>
+                : <span style={styles.listingInfoValue}>{availableSeats - Number(form.seats)}</span>
               }
             </div>
           )}
@@ -448,6 +461,7 @@ export default function ProviderCalendar({
           slot={modalSlot}
           booking={editingBooking}
           listings={listings}
+          manualBookings={manualBookings}
           onSave={editingBooking ? handleEdit : handleSave}
           onClose={() => { setModalSlot(null); setEditingBooking(null); }}
           saving={saving}
@@ -495,6 +509,7 @@ const styles = {
   closeBtn:         { background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: '#888780', padding: '4px' },
   formGrid:         { display: 'flex', flexDirection: 'column', gap: '14px' },
   label:            { display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#5F5E5A', fontWeight: '500' },
+
   input:            { border: '0.5px solid #B4B2A9', borderRadius: '6px', padding: '8px 10px', fontSize: '14px', color: '#2C2C2A', background: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' },
   listingInfo:           { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', background: '#F1EFE8', borderRadius: '6px', padding: '10px 12px', fontSize: '13px', alignItems: 'center' },
   listingInfoError:      { background: '#FCEBEB', border: '0.5px solid #F09595' },

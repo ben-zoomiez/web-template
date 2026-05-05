@@ -83,7 +83,6 @@ export const CalendarPageComponent = props => {
     dispatch(setSaveInProgress(true));
     dispatch(setSaveError(null));
 
-    // Partially block the slot: leave remaining seats available for platform bookings
     const remainingSeats = Math.max(0, (listing.seats || 1) - Number(form.seats));
 
     let availabilityExceptionId = null;

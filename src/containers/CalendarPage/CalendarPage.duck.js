@@ -68,9 +68,10 @@ const fetchPlatformBookingsPayloadCreator = async (_, { extra: sdk, rejectWithVa
         id:           `platform-${tx.id?.uuid || tx.id}`,
         customerName: customer?.attributes?.profile?.displayName || 'Customer',
         listingTitle: listing?.attributes?.title || 'Booking',
+        listingId:    listingRef?.id?.uuid || '',
         start:        booking?.attributes?.start || tx.attributes?.createdAt,
         end:          booking?.attributes?.end   || tx.attributes?.createdAt,
-        seats:        tx.attributes?.seats || booking?.attributes?.seats || 1,
+        seats:        booking?.attributes?.seats || 1,
       };
     });
 
