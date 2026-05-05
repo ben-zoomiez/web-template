@@ -61,8 +61,13 @@ function buildEvents(platformBookings, manualBookings, availabilityExceptions) {
     textColor:       EVENT_COLORS.manual.text,
   }));
 
-  const exceptions = (availabilityExceptions || []).map(ex => {
-    return {
+  const linkedExceptionIds = new Set(
+    (manualBookings || []).map(b => b.extendedProps?.availabilityExceptionId).filter(Boolean)
+  );
+
+  const exceptions = (availabilityExceptions || [])
+    .filter(ex => !linkedExceptionIds.has(ex.id))
+    .map(ex => ({
       id:    ex.id,
       title: `${ex.listingTitle || 'Availability'} — Exception`,
       start: ex.start,
@@ -71,8 +76,7 @@ function buildEvents(platformBookings, manualBookings, availabilityExceptions) {
       borderColor:     EVENT_COLORS.unavailable.border,
       textColor:       EVENT_COLORS.unavailable.text,
       extendedProps: { bookingType: 'availability', ...ex },
-    };
-  });
+    }));
 
   return [...platform, ...manual, ...exceptions];
 }
@@ -84,6 +88,7 @@ function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }
   const ep     = booking?.extendedProps || {};
   const [form, setForm] = useState({
     customerName:  ep.customerName  || '',
+    customerPhone: ep.customerPhone || '',
     customerEmail: ep.customerEmail || '',
     listingId:     ep.listingId     || '',
     seats:         ep.seats         || 1,
@@ -117,12 +122,17 @@ function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }
 
           <label style={styles.label}>
             Customer name *
-            <input style={styles.input} name="customerName" value={form.customerName} onChange={handleChange} placeholder="Jane Smith" />
+            <input style={styles.input} name="customerName" value={form.customerName} onChange={handleChange} />
+          </label>
+
+          <label style={styles.label}>
+            Phone number
+            <input style={styles.input} name="customerPhone" type="tel" value={form.customerPhone} onChange={handleChange} />
           </label>
 
           <label style={styles.label}>
             Customer email
-            <input style={styles.input} name="customerEmail" type="email" value={form.customerEmail} onChange={handleChange} placeholder="jane@example.com" />
+            <input style={styles.input} name="customerEmail" type="email" value={form.customerEmail} onChange={handleChange} />
           </label>
 
           <label style={styles.label}>
@@ -137,20 +147,20 @@ function ManualBookingModal({ slot, booking, listings, onSave, onClose, saving }
             </select>
           </label>
 
+          <label style={styles.label}>
+            Pets *
+            <input style={styles.input} name="seats" type="number" min="1" max={totalSeats} value={form.seats} onChange={handleChange} />
+          </label>
+
           {selectedListing && (
-            <div style={styles.listingInfo}>
-              <span style={styles.listingInfoLabel}>Total seats</span>
-              <span style={styles.listingInfoValue}>{totalSeats}</span>
-              <span style={styles.listingInfoLabel}>Type</span>
-              <span style={styles.listingInfoValue}>{selectedListing.unitType || 'Standard'}</span>
+            <div style={{ ...styles.listingInfo, ...(seatsExceeded ? styles.listingInfoError : {}) }}>
+              <span style={styles.listingInfoLabel}>Availability after booking</span>
+              {seatsExceeded
+                ? <span style={styles.listingInfoErrorValue}>Exceeds capacity by {Number(form.seats) - totalSeats}</span>
+                : <span style={styles.listingInfoValue}>{totalSeats - Number(form.seats)}</span>
+              }
             </div>
           )}
-
-          <label style={styles.label}>
-            Seats to book *
-            <input style={styles.input} name="seats" type="number" min="1" max={totalSeats} value={form.seats} onChange={handleChange} />
-            {seatsExceeded && <span style={styles.fieldError}>Exceeds total seats for this listing ({totalSeats})</span>}
-          </label>
 
           <label style={styles.label}>
             Start *
@@ -224,6 +234,13 @@ function EventPopover({ event, position, onClose, onDelete, onEdit }) {
         </div>
       )}
 
+      {props.customerPhone && (
+        <div style={styles.popoverDetail}>
+          <span style={styles.popoverLabel}>Phone</span>
+          <span>{props.customerPhone}</span>
+        </div>
+      )}
+
       {props.customerEmail && (
         <div style={styles.popoverDetail}>
           <span style={styles.popoverLabel}>Email</span>
@@ -265,6 +282,7 @@ export default function ProviderCalendar({
   onSaveManual,
   onEditManual,
   onDeleteManual,
+  onRefresh,
 }) {
   const calendarRef                         = useRef(null);
   const [modalSlot, setModalSlot]           = useState(null);
@@ -328,9 +346,6 @@ export default function ProviderCalendar({
           <h2 style={styles.heading}>Your calendar</h2>
           <p style={styles.subheading}>All your bookings in one place</p>
         </div>
-        <button style={styles.addBtn} onClick={() => setModalSlot({ startStr: '', endStr: '' })}>
-          + Add manual booking
-        </button>
       </div>
 
       <div style={styles.statsRow}>
@@ -346,17 +361,27 @@ export default function ProviderCalendar({
         ))}
       </div>
 
-      <div style={styles.legend}>
-        {[
-          { color: EVENT_COLORS.platform.bg,    label: 'Platform booking' },
-          { color: EVENT_COLORS.manual.bg,      label: 'Manual booking'   },
-          { color: EVENT_COLORS.unavailable.bg, label: 'Availability Exception', border: EVENT_COLORS.unavailable.border },
-        ].map(({ color, label, border }) => (
-          <div key={label} style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: color, border: border ? `1px solid ${border}` : 'none' }} />
-            <span style={styles.legendLabel}>{label}</span>
-          </div>
-        ))}
+      <div style={styles.legendRow}>
+        <div style={styles.legend}>
+          {[
+            { color: EVENT_COLORS.platform.bg,    label: 'Platform booking' },
+            { color: EVENT_COLORS.manual.bg,      label: 'Manual booking'   },
+            { color: EVENT_COLORS.unavailable.bg, label: 'Availability Exception', border: EVENT_COLORS.unavailable.border },
+          ].map(({ color, label, border }) => (
+            <div key={label} style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: color, border: border ? `1px solid ${border}` : 'none' }} />
+              <span style={styles.legendLabel}>{label}</span>
+            </div>
+          ))}
+        </div>
+        <div style={styles.legendActions}>
+          <button style={styles.refreshBtn} onClick={onRefresh} disabled={loading}>
+            {loading ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+          <button style={styles.addBtn} onClick={() => setModalSlot({ startStr: '', endStr: '' })}>
+            + Add manual booking
+          </button>
+        </div>
       </div>
 
       {error && <div style={styles.errorBanner}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</div>}
@@ -440,12 +465,15 @@ const styles = {
   header:           { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' },
   heading:          { fontSize: '22px', fontWeight: '500', margin: '0 0 4px' },
   subheading:       { fontSize: '14px', color: '#888780', margin: 0 },
+  legendActions:    { display: 'flex', gap: '8px', alignItems: 'center' },
+  refreshBtn:       { background: 'transparent', border: '0.5px solid #B4B2A9', borderRadius: '8px', padding: '10px 16px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', color: '#444441' },
   addBtn:           { background: 'var(--marketplaceColor)', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 18px', fontSize: '14px', fontWeight: '500', cursor: 'pointer' },
   statsRow:         { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' },
   statCard:         { background: '#F1EFE8', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' },
   statLabel:        { fontSize: '12px', color: '#888780', textTransform: 'uppercase', letterSpacing: '0.05em' },
   statValue:        { fontSize: '24px', fontWeight: '500', color: '#2C2C2A' },
-  legend:           { display: 'flex', gap: '20px', marginBottom: '16px', flexWrap: 'wrap' },
+  legendRow:        { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' },
+  legend:           { display: 'flex', gap: '20px', flexWrap: 'wrap' },
   legendItem:       { display: 'flex', alignItems: 'center', gap: '6px' },
   legendDot:        { width: '10px', height: '10px', borderRadius: '50%', display: 'inline-block' },
   legendLabel:      { fontSize: '13px', color: '#5F5E5A' },
@@ -468,13 +496,15 @@ const styles = {
   formGrid:         { display: 'flex', flexDirection: 'column', gap: '14px' },
   label:            { display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#5F5E5A', fontWeight: '500' },
   input:            { border: '0.5px solid #B4B2A9', borderRadius: '6px', padding: '8px 10px', fontSize: '14px', color: '#2C2C2A', background: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' },
-  listingInfo:      { display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', gap: '8px', background: '#F1EFE8', borderRadius: '6px', padding: '10px 12px', fontSize: '13px', alignItems: 'center' },
-  listingInfoLabel: { color: '#888780' },
-  listingInfoValue: { fontWeight: '500', color: '#2C2C2A' },
-  fieldError:       { fontSize: '12px', color: '#A32D2D', marginTop: '2px' },
+  listingInfo:           { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px', background: '#F1EFE8', borderRadius: '6px', padding: '10px 12px', fontSize: '13px', alignItems: 'center' },
+  listingInfoError:      { background: '#FCEBEB', border: '0.5px solid #F09595' },
+  listingInfoLabel:      { color: '#888780' },
+  listingInfoValue:      { fontWeight: '500', color: '#2C2C2A' },
+  listingInfoErrorValue: { fontWeight: '500', color: '#A32D2D' },
+  fieldError:            { fontSize: '12px', color: '#A32D2D', marginTop: '2px' },
   modalFooter:      { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' },
   cancelBtn:        { background: 'transparent', border: '0.5px solid #B4B2A9', borderRadius: '6px', padding: '8px 16px', fontSize: '14px', cursor: 'pointer', color: '#444441' },
-  saveBtn:          { background: '#1D9E75', border: 'none', borderRadius: '6px', padding: '8px 20px', fontSize: '14px', fontWeight: '500', color: '#fff', cursor: 'pointer' },
+  saveBtn:          { background: 'var(--marketplaceColor)', border: 'none', borderRadius: '6px', padding: '8px 20px', fontSize: '14px', fontWeight: '500', color: '#fff', cursor: 'pointer' },
   savingNote:       { fontSize: '12px', color: '#888780', textAlign: 'center', marginTop: '12px' },
   popover:          { position: 'absolute', background: '#fff', border: '0.5px solid #D3D1C7', borderRadius: '10px', padding: '16px', width: '260px', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.10)' },
   popoverHeader:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { compose } from 'redux';
 import { connect, useDispatch } from 'react-redux';
 
@@ -58,27 +58,25 @@ export const CalendarPageComponent = props => {
     }
   }, []);
 
-  // Fetch listings, bookings, then exceptions (exceptions need listing IDs)
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [{ listings: loadedListings }] = await Promise.all([
-          dispatch(fetchListingsThunk()).unwrap(),
-          dispatch(fetchPlatformBookingsThunk()).unwrap(),
-        ]);
-        if (loadedListings.length > 0) {
-          await dispatch(
-            fetchAvailabilityExceptionsThunk({ listingIds: loadedListings.map(l => l.id), listings: loadedListings })
-          ).unwrap();
-        }
-      } catch (e) {
-        console.error('Failed to load calendar data:', e);
+  const loadCalendarData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [{ listings: loadedListings }] = await Promise.all([
+        dispatch(fetchListingsThunk()).unwrap(),
+        dispatch(fetchPlatformBookingsThunk()).unwrap(),
+      ]);
+      if (loadedListings.length > 0) {
+        await dispatch(
+          fetchAvailabilityExceptionsThunk({ listingIds: loadedListings.map(l => l.id), listings: loadedListings })
+        ).unwrap();
       }
-      setLoading(false);
-    };
-    load();
+    } catch (e) {
+      console.error('Failed to load calendar data:', e);
+    }
+    setLoading(false);
   }, [dispatch]);
+
+  useEffect(() => { loadCalendarData(); }, [loadCalendarData]);
 
   // Save a manual booking and create a matching availability exception
   const handleSaveManual = async ({ form, listing }) => {
@@ -114,6 +112,7 @@ export const CalendarPageComponent = props => {
       extendedProps: {
         bookingType:            'manual',
         customerName:           form.customerName,
+        customerPhone:          form.customerPhone,
         customerEmail:          form.customerEmail,
         listingTitle:           listing.title,
         listingId:              listing.id,
@@ -171,6 +170,7 @@ export const CalendarPageComponent = props => {
       extendedProps: {
         bookingType:            'manual',
         customerName:           form.customerName,
+        customerPhone:          form.customerPhone,
         customerEmail:          form.customerEmail,
         listingTitle:           listing.title,
         listingId:              listing.id,
@@ -223,6 +223,7 @@ export const CalendarPageComponent = props => {
               onSaveManual={handleSaveManual}
               onEditManual={handleEditManual}
               onDeleteManual={handleDeleteManual}
+              onRefresh={loadCalendarData}
             />
           </div>
         </div>
