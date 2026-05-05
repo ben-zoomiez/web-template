@@ -35,6 +35,37 @@ function formatTime(date) {
   return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// Returns the plan's seat capacity for the days covered by [startTime, endTime],
+// or 0 if any covered day has no entry, or null if the plan/dates are incomplete.
+function getSlotCapacity(availabilityPlan, startTime, endTime) {
+  const entries = availabilityPlan?.entries;
+  if (!entries?.length || !startTime || !endTime) return null;
+
+  const start = new Date(startTime);
+  const end   = new Date(endTime);
+  if (isNaN(start) || isNaN(end) || start >= end) return null;
+
+  const coveredDays = new Set();
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  while (cursor.getTime() < end.getTime()) {
+    coveredDays.add(cursor.getDay());
+    cursor.setDate(cursor.getDate() + 1);
+    if (coveredDays.size >= 7) break;
+  }
+
+  let min = Infinity;
+  for (const dayNum of coveredDays) {
+    const entry = entries.find(e => e.dayOfWeek === DAY_NAMES[dayNum]);
+    const seats = entry?.seats ?? 0;
+    if (seats === 0) return 0;
+    min = Math.min(min, seats);
+  }
+  return min === Infinity ? null : min;
+}
+
 function toDatetimeLocal(date) {
   if (!date) return '';
   const d   = new Date(date);
@@ -97,23 +128,32 @@ function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, o
     endTime:   isEdit ? toDatetimeLocal(booking.end)   : (slot?.endStr   ? toDatetimeLocal(slot.endStr)   : ''),
   });
 
-  const selectedListing = listings.find(l => l.id === form.listingId);
-  const totalSeats      = selectedListing?.seats || 1;
+  const selectedListing  = listings.find(l => l.id === form.listingId);
+  const noAvailability   = !!selectedListing && selectedListing.seats === null;
+  const hasSlot          = !!form.startTime && !!form.endTime;
+
+  const slotCapacity     = (!noAvailability && hasSlot)
+    ? getSlotCapacity(selectedListing?.availabilityPlan, form.startTime, form.endTime)
+    : null;
+  const notAvailableOnDay = !noAvailability && hasSlot && slotCapacity === 0;
+  const totalSeats        = slotCapacity ?? selectedListing?.seats ?? null;
 
   const alreadyBookedSeats = (() => {
-    if (!form.listingId || !form.startTime || !form.endTime) return 0;
+    if (!form.listingId || !hasSlot || noAvailability || notAvailableOnDay) return 0;
     const newStart = new Date(form.startTime);
     const newEnd   = new Date(form.endTime);
     const overlaps = b => new Date(b.start) < newEnd && new Date(b.end) > newStart;
-
     return (manualBookings || [])
       .filter(b => b.extendedProps?.listingId === form.listingId && b.id !== booking?.id && overlaps(b))
       .reduce((sum, b) => sum + (b.extendedProps?.seats || 1), 0);
   })();
 
-  const availableSeats  = totalSeats - alreadyBookedSeats;
-  const seatsExceeded   = Number(form.seats) > availableSeats;
-  const isValid         = form.customerName && form.listingId && form.startTime && form.endTime && Number(form.seats) >= 1 && !seatsExceeded;
+  const availableSeats = (noAvailability || notAvailableOnDay || totalSeats === null)
+    ? null
+    : totalSeats - alreadyBookedSeats;
+  const seatsExceeded  = availableSeats !== null && Number(form.seats) > availableSeats;
+  const isValid        = form.customerName && form.listingId && hasSlot
+                      && Number(form.seats) >= 1 && !seatsExceeded && !noAvailability && !notAvailableOnDay;
 
   const handleChange = e => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
@@ -166,13 +206,23 @@ function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, o
           </label>
 
           {selectedListing && (
-            <div style={{ ...styles.listingInfo, ...(seatsExceeded ? styles.listingInfoError : {}) }}>
-              <span style={styles.listingInfoLabel}>Availability after booking</span>
-              {seatsExceeded
-                ? <span style={styles.listingInfoErrorValue}>Exceeds capacity by {Number(form.seats) - availableSeats}</span>
-                : <span style={styles.listingInfoValue}>{availableSeats - Number(form.seats)}</span>
-              }
-            </div>
+            noAvailability ? (
+              <div style={{ ...styles.listingInfo, ...styles.listingInfoError, gridTemplateColumns: '1fr' }}>
+                <span style={styles.listingInfoErrorValue}>No availability configured — bookings cannot be made for this listing</span>
+              </div>
+            ) : notAvailableOnDay ? (
+              <div style={{ ...styles.listingInfo, ...styles.listingInfoError, gridTemplateColumns: '1fr' }}>
+                <span style={styles.listingInfoErrorValue}>Listing not available on the selected day(s)</span>
+              </div>
+            ) : hasSlot && availableSeats !== null ? (
+              <div style={{ ...styles.listingInfo, ...(seatsExceeded ? styles.listingInfoError : {}) }}>
+                <span style={styles.listingInfoLabel}>Availability after booking</span>
+                {seatsExceeded
+                  ? <span style={styles.listingInfoErrorValue}>Exceeds capacity by {Number(form.seats) - availableSeats}</span>
+                  : <span style={styles.listingInfoValue}>{availableSeats - Number(form.seats)} of {totalSeats}</span>
+                }
+              </div>
+            ) : null
           )}
 
           <label style={styles.label}>

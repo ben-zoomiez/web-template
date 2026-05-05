@@ -17,14 +17,18 @@ const { UUID } = sdkTypes;
 const fetchListingsPayloadCreator = async (_, { extra: sdk, rejectWithValue }) => {
   try {
     const response = await sdk.ownListings.query({ perPage: 100 });
-    const listings = (response.data.data || []).map(l => ({
-      id:       l.id.uuid,
-      title:    l.attributes.title,
-      unitType: l.attributes.publicData?.unitType || null,
-      seats:    l.attributes.publicData?.seats
-             || l.attributes.availabilityPlan?.seats
-             || 1,
-    }));
+    const listings = (response.data.data || []).map(l => {
+      const plan     = l.attributes.availabilityPlan || null;
+      const entries  = plan?.entries || [];
+      const entryMax = entries.length > 0 ? Math.max(...entries.map(e => e.seats ?? 0)) : 0;
+      return {
+        id:               l.id.uuid,
+        title:            l.attributes.title,
+        unitType:         l.attributes.publicData?.unitType || null,
+        seats:            l.attributes.publicData?.seats ?? plan?.seats ?? (entryMax > 0 ? entryMax : null),
+        availabilityPlan: plan,
+      };
+    });
     return { listings };
   } catch (e) {
     return rejectWithValue(storableError(e));
