@@ -37,32 +37,53 @@ function formatTime(date) {
 
 const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-// Returns the plan's seat capacity for the days covered by [startTime, endTime],
-// or 0 if any covered day has no entry, or null if the plan/dates are incomplete.
-function getSlotCapacity(availabilityPlan, startTime, endTime) {
-  const entries = availabilityPlan?.entries;
-  if (!entries?.length || !startTime || !endTime) return null;
+// Returns the effective seat capacity for [startTime, endTime], per calendar day:
+//   exception seats take priority over plan entries for any day they cover.
+// Returns 0 if any covered day is unavailable, null if capacity can't be determined.
+function getSlotCapacity(availabilityPlan, startTime, endTime, availabilityExceptions, listingId) {
+  if (!startTime || !endTime) return null;
 
   const start = new Date(startTime);
   const end   = new Date(endTime);
   if (isNaN(start) || isNaN(end) || start >= end) return null;
 
-  const coveredDays = new Set();
+  const entries = availabilityPlan?.entries || [];
+  const relevantExceptions = (availabilityExceptions || []).filter(
+    ex => ex.listingId === listingId && new Date(ex.start) < end && new Date(ex.end) > start
+  );
+
   const cursor = new Date(start);
   cursor.setHours(0, 0, 0, 0);
-  while (cursor.getTime() < end.getTime()) {
-    coveredDays.add(cursor.getDay());
-    cursor.setDate(cursor.getDate() + 1);
-    if (coveredDays.size >= 7) break;
-  }
 
   let min = Infinity;
-  for (const dayNum of coveredDays) {
-    const entry = entries.find(e => e.dayOfWeek === DAY_NAMES[dayNum]);
-    const seats = entry?.seats ?? 0;
-    if (seats === 0) return 0;
-    min = Math.min(min, seats);
+  let daysChecked = 0;
+
+  while (cursor.getTime() < end.getTime()) {
+    const dayStart = new Date(cursor);
+    const dayEnd   = new Date(cursor);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    const exception = relevantExceptions.find(
+      ex => new Date(ex.start) < dayEnd && new Date(ex.end) > dayStart
+    );
+
+    if (exception) {
+      const seats = exception.seats ?? 0;
+      if (seats === 0) return 0;
+      min = Math.min(min, seats);
+    } else if (entries.length > 0) {
+      const entry = entries.find(e => e.dayOfWeek === DAY_NAMES[cursor.getDay()]);
+      const seats = entry?.seats ?? 0;
+      if (seats === 0) return 0;
+      min = Math.min(min, seats);
+    } else {
+      return null;
+    }
+
+    cursor.setDate(cursor.getDate() + 1);
+    if (++daysChecked >= 7) break;
   }
+
   return min === Infinity ? null : min;
 }
 
@@ -114,7 +135,7 @@ function buildEvents(platformBookings, manualBookings, availabilityExceptions) {
 
 // ─── Manual booking modal ─────────────────────────────────────────────────────
 
-function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, onClose, saving }) {
+function ManualBookingModal({ slot, booking, listings, manualBookings, platformBookings, availabilityExceptions, onSave, onClose, saving }) {
   const isEdit = !!booking;
   const ep     = booking?.extendedProps || {};
   const [form, setForm] = useState({
@@ -132,8 +153,15 @@ function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, o
   const noAvailability   = !!selectedListing && selectedListing.seats === null;
   const hasSlot          = !!form.startTime && !!form.endTime;
 
+  // Exclude exceptions that were created by manual bookings — they already encode reduced
+  // remaining seats, so using them as totalSeats would double-count the manual booking.
+  const linkedExceptionIds = new Set(
+    (manualBookings || []).map(b => b.extendedProps?.availabilityExceptionId).filter(Boolean)
+  );
+  const unlinkedExceptions = (availabilityExceptions || []).filter(ex => !linkedExceptionIds.has(ex.id));
+
   const slotCapacity     = (!noAvailability && hasSlot)
-    ? getSlotCapacity(selectedListing?.availabilityPlan, form.startTime, form.endTime)
+    ? getSlotCapacity(selectedListing?.availabilityPlan, form.startTime, form.endTime, unlinkedExceptions, form.listingId)
     : null;
   const notAvailableOnDay = !noAvailability && hasSlot && slotCapacity === 0;
   const totalSeats        = slotCapacity ?? selectedListing?.seats ?? null;
@@ -143,9 +171,13 @@ function ManualBookingModal({ slot, booking, listings, manualBookings, onSave, o
     const newStart = new Date(form.startTime);
     const newEnd   = new Date(form.endTime);
     const overlaps = b => new Date(b.start) < newEnd && new Date(b.end) > newStart;
-    return (manualBookings || [])
+    const manualSeats   = (manualBookings || [])
       .filter(b => b.extendedProps?.listingId === form.listingId && b.id !== booking?.id && overlaps(b))
       .reduce((sum, b) => sum + (b.extendedProps?.seats || 1), 0);
+    const platformSeats = (platformBookings || [])
+      .filter(b => b.listingId === form.listingId && overlaps(b))
+      .reduce((sum, b) => sum + (b.seats || 1), 0);
+    return manualSeats + platformSeats;
   })();
 
   const availableSeats = (noAvailability || notAvailableOnDay || totalSeats === null)
@@ -512,6 +544,8 @@ export default function ProviderCalendar({
           booking={editingBooking}
           listings={listings}
           manualBookings={manualBookings}
+          platformBookings={platformBookings}
+          availabilityExceptions={availabilityExceptions}
           onSave={editingBooking ? handleEdit : handleSave}
           onClose={() => { setModalSlot(null); setEditingBooking(null); }}
           saving={saving}
